@@ -10,9 +10,6 @@
   "prCreation": "immediate",
   "prHourlyLimit": 0,
   "platformAutomerge": true,
-  "ignorePaths": [
-    "**/.dagger/**"
-  ],
   "packageRules": [
     {
       "automerge": true,
@@ -47,6 +44,16 @@
       "matchUpdateTypes": [
         "minor",
         "patch"
+      ]
+    },
+    {
+      "description": "Dagger's Go SDK is generated from dagger.json with dagger develop, so do not update dagger.io/dagger as a plain Go module.",
+      "enabled": false,
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "dagger.io/dagger"
       ]
     }
   ]

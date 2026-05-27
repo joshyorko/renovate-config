@@ -23,6 +23,7 @@ Create a GitHub App named `Patchraptor`, install it on:
 Repository permissions:
 
 - Contents: read and write
+- Dependabot alerts / vulnerability alerts: read-only
 - Issues: read and write
 - Pull requests: read and write
 - Workflows: read and write
