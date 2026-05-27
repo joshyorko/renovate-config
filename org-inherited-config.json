@@ -47,7 +47,9 @@
       ]
     },
     {
-      "description": "Dagger's Go SDK is generated from dagger.json with dagger develop, so do not update dagger.io/dagger as a plain Go module.",
+      "description": [
+        "Dagger's Go SDK is generated from dagger.json with dagger develop, so do not update dagger.io/dagger as a plain Go module."
+      ],
       "enabled": false,
       "matchManagers": [
         "gomod"
