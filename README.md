@@ -22,6 +22,8 @@ Create a GitHub App named `Patchraptor`, install it on:
 
 Repository permissions:
 
+- Administration: read-only
+- Checks: read and write
 - Contents: read and write
 - Dependabot alerts / vulnerability alerts: read-only
 - Issues: read and write
@@ -48,3 +50,11 @@ Patchraptor detects Dagger module dependencies in `.dagger/go.mod`, but does not
 open Renovate Go module PRs for that file. Dagger generates `internal/dagger`
 with `dagger develop`, and Renovate's generic Go artifact update runs
 `go get -t ./...` without that generated package present.
+
+## Dashboard warnings
+
+If a target repository dashboard says `Cannot access vulnerability alerts`, the
+Patchraptor GitHub App installation is missing `Dependabot alerts: read-only`
+access. The repository can still receive normal dependency PRs, but Renovate
+cannot read GitHub vulnerability alerts until the App permissions are updated
+and the installation accepts the new permission request.
