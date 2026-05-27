@@ -30,12 +30,12 @@ Repository permissions:
 
 Then set these repository secrets on `joshyorko/renovate-config`:
 
-- `RENOVATE_APP_ID`
+- `RENOVATE_CLIENT_ID`
 - `RENOVATE_PRIVATE_KEY`
 
 Example:
 
 ```bash
-gh secret set RENOVATE_APP_ID --repo joshyorko/renovate-config --body "<app-id>"
+gh secret set RENOVATE_CLIENT_ID --repo joshyorko/renovate-config --body "<client-id>"
 gh secret set RENOVATE_PRIVATE_KEY --repo joshyorko/renovate-config < /path/to/dudley-bot.private-key.pem
 ```
