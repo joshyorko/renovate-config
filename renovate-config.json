@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "onboarding": false,
+  "platform": "github",
+  "autodiscover": true,
+  "autodiscoverFilter": [
+    "joshyorko/dsb-common",
+    "joshyorko/dudley-os"
+  ],
+  "requireConfig": "required",
+  "inheritConfig": true,
+  "inheritConfigRepoName": "joshyorko/renovate-config",
+  "inheritConfigFileName": "org-inherited-config.json",
+  "inheritConfigStrict": true
+}
+

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":semanticCommits"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Patchraptor Dependency Dashboard",
+  "rebaseWhen": "auto",
+  "prCreation": "immediate",
+  "prHourlyLimit": 0,
+  "platformAutomerge": true,
+  "ignorePaths": [
+    "**/.dagger/**"
+  ],
+  "packageRules": [
+    {
+      "automerge": true,
+      "matchUpdateTypes": [
+        "pin",
+        "pinDigest"
+      ]
+    },
+    {
+      "automerge": true,
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ]
+    },
+    {
+      "automerge": true,
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ]
+    }
+  ]
+}

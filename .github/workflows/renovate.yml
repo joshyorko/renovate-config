@@ -1,0 +1,55 @@
+name: Patchraptor Renovate
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/renovate.yml"
+      - "renovate-config.json"
+      - "org-inherited-config.json"
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+    inputs:
+      log-level:
+        description: "Set the Renovate log level"
+        required: false
+        default: info
+        type: choice
+        options:
+          - info
+          - debug
+
+concurrency:
+  group: patchraptor-renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    name: Patchraptor dependency sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Token
+        id: get-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 1
+          token: ${{ steps.get-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
+        env:
+          RENOVATE_DRY_RUN: ${{ github.event_name == 'pull_request' && 'full' }}
+          LOG_LEVEL: ${{ github.event.inputs.log-level || 'info' }}
+        with:
+          token: ${{ steps.get-token.outputs.token }}
+          configurationFile: ./renovate-config.json
