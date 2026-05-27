@@ -57,6 +57,18 @@
       "matchPackageNames": [
         "dagger.io/dagger"
       ]
+    },
+    {
+      "description": [
+        "Dagger module dependencies import generated internal/dagger code, so generic Go module artifact updates fail without running dagger develop first."
+      ],
+      "enabled": false,
+      "matchFileNames": [
+        ".dagger/go.mod"
+      ],
+      "matchManagers": [
+        "gomod"
+      ]
     }
   ]
 }

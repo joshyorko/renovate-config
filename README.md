@@ -26,6 +26,7 @@ Repository permissions:
 - Dependabot alerts / vulnerability alerts: read-only
 - Issues: read and write
 - Pull requests: read and write
+- Commit statuses: read and write
 - Workflows: read and write
 - Metadata: read-only
 
@@ -40,3 +41,10 @@ Example:
 gh secret set RENOVATE_CLIENT_ID --repo joshyorko/renovate-config --body "<client-id>"
 gh secret set RENOVATE_PRIVATE_KEY --repo joshyorko/renovate-config < /path/to/dudley-bot.private-key.pem
 ```
+
+## Dagger modules
+
+Patchraptor detects Dagger module dependencies in `.dagger/go.mod`, but does not
+open Renovate Go module PRs for that file. Dagger generates `internal/dagger`
+with `dagger develop`, and Renovate's generic Go artifact update runs
+`go get -t ./...` without that generated package present.
