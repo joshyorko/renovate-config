@@ -37,6 +37,15 @@ jobs:
           client-id: ${{ secrets.RENOVATE_CLIENT_ID }}
           private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          permission-administration: read
+          permission-checks: write
+          permission-contents: write
+          permission-issues: write
+          permission-metadata: read
+          permission-pull-requests: write
+          permission-statuses: write
+          permission-vulnerability-alerts: read
+          permission-workflows: write
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
