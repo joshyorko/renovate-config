@@ -4,6 +4,7 @@
     "config:best-practices",
     ":semanticCommits"
   ],
+  "branchPrefix": "patchraptor/",
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Patchraptor Dependency Dashboard",
   "rebaseWhen": "auto",

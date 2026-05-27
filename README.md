@@ -12,6 +12,10 @@ Patchraptor runs every 30 minutes. Dependency Dashboard checkbox edits in target
 repositories are processed on the next central run or after a manual workflow
 dispatch in this repo.
 
+Patchraptor uses `patchraptor/` for Renovate branch names. Project Bluefin's bot
+identity is branded, but its live dependency PR branches still use Renovate's
+default `renovate/` prefix; this config keeps the branch names branded too.
+
 ## GitHub App setup
 
 Create a GitHub App named `Patchraptor`, install it on:
