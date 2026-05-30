@@ -24,6 +24,7 @@ Create a GitHub App named `Patchraptor`, install it on:
 - `joshyorko/dsb-common`
 - `joshyorko/dudley-os`
 - `joshyorko/homebrew-tools`
+- `joshyorko/rcc`
 - `joshyorko/room-of-requirement`
 
 Repository permissions:

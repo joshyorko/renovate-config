@@ -7,6 +7,7 @@
     "joshyorko/dsb-common",
     "joshyorko/dudley-os",
     "joshyorko/homebrew-tools",
+    "joshyorko/rcc",
     "joshyorko/room-of-requirement"
   ],
   "requireConfig": "required",
