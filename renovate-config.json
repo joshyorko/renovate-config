@@ -5,7 +5,9 @@
   "autodiscover": true,
   "autodiscoverFilter": [
     "joshyorko/dsb-common",
-    "joshyorko/dudley-os"
+    "joshyorko/dudley-os",
+    "joshyorko/homebrew-tools",
+    "joshyorko/room-of-requirement"
   ],
   "requireConfig": "required",
   "inheritConfig": true,
@@ -13,4 +15,3 @@
   "inheritConfigFileName": "org-inherited-config.json",
   "inheritConfigStrict": true
 }
-
