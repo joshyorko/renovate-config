@@ -5,6 +5,7 @@
   "autodiscover": true,
   "autodiscoverFilter": [
     "joshyorko/dsb-common",
+    "joshyorko/dudley-factory",
     "joshyorko/dudley-os",
     "joshyorko/homebrew-tools",
     "joshyorko/rcc",
