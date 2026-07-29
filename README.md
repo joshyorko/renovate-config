@@ -20,6 +20,7 @@ default `renovate/` prefix; this config keeps the branch names branded too.
 
 Create a GitHub App named `Patchraptor`, install it on:
 
+- `joshyorko/camp`
 - `joshyorko/renovate-config`
 - `joshyorko/dsb-common`
 - `joshyorko/dudley-factory`

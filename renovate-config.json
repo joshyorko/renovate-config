@@ -4,12 +4,16 @@
   "platform": "github",
   "autodiscover": true,
   "autodiscoverFilter": [
+    "joshyorko/camp",
     "joshyorko/dsb-common",
     "joshyorko/dudley-factory",
     "joshyorko/dudley-os",
     "joshyorko/homebrew-tools",
     "joshyorko/rcc",
     "joshyorko/room-of-requirement"
+  ],
+  "allowedCommands": [
+    "^node developer/update_dependency_locks\\.mjs$"
   ],
   "requireConfig": "required",
   "inheritConfig": true,
