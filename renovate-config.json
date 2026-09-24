@@ -10,10 +10,14 @@
     "joshyorko/dudley-os",
     "joshyorko/homebrew-tools",
     "joshyorko/rcc",
+    "joshyorko/review",
     "joshyorko/room-of-requirement"
   ],
   "allowedCommands": [
-    "^node developer/update_dependency_locks\\.mjs$"
+    "^node developer/update_dependency_locks\\.mjs$",
+    "^node scripts/update-omp-pins\\.mjs$",
+    "^node scripts/update-gh-pins\\.mjs$",
+    "^node scripts/update-requirements-ci-hashes\\.mjs$"
   ],
   "requireConfig": "required",
   "inheritConfig": true,

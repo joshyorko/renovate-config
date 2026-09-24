@@ -22,6 +22,7 @@ Create a GitHub App named `Patchraptor`, install it on:
 
 - `joshyorko/camp`
 - `joshyorko/renovate-config`
+- `joshyorko/review`
 - `joshyorko/dsb-common`
 - `joshyorko/dudley-factory`
 - `joshyorko/dudley-os`
