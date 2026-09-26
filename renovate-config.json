@@ -17,7 +17,8 @@
     "^node developer/update_dependency_locks\\.mjs$",
     "^node scripts/update-omp-pins\\.mjs$",
     "^node scripts/update-gh-pins\\.mjs$",
-    "^node scripts/update-requirements-ci-hashes\\.mjs$"
+    "^node scripts/update-requirements-ci-hashes\\.mjs$",
+    "^node scripts/update-typesafe-pins\\.mjs$"
   ],
   "requireConfig": "required",
   "inheritConfig": true,
