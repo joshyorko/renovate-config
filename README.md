@@ -21,6 +21,7 @@ default `renovate/` prefix; this config keeps the branch names branded too.
 Create a GitHub App named `Patchraptor`, install it on:
 
 - `joshyorko/camp`
+- `joshyorko/devsy-provider-harvester`
 - `joshyorko/renovate-config`
 - `joshyorko/review`
 - `joshyorko/dsb-common`

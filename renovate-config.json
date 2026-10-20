@@ -5,6 +5,7 @@
   "autodiscover": true,
   "autodiscoverFilter": [
     "joshyorko/camp",
+    "joshyorko/devsy-provider-harvester",
     "joshyorko/dsb-common",
     "joshyorko/dudley-factory",
     "joshyorko/dudley-os",
