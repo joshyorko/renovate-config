@@ -62,3 +62,130 @@ jobs:
         with:
           token: ${{ steps.get-token.outputs.token }}
           configurationFile: ./renovate-config.json
+
+  qualification-tests:
+    name: Review qualification receipt tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - run: python3 tests/test_review_qualification.py
+
+  qualify-review-omp:
+    name: Qualify Review OMP update without write credentials
+    needs: renovate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      active: ${{ steps.find.outputs.active }}
+      head: ${{ steps.find.outputs.head }}
+      base: ${{ steps.find.outputs.base }}
+      number: ${{ steps.find.outputs.number }}
+    steps:
+      - name: Find the exact PatchRaptor OMP PR
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api 'repos/joshyorko/review/pulls?state=open&head=joshyorko%3Apatchraptor%2Fomp-runtime&base=main' > "$RUNNER_TEMP/review-pr.json"
+          count="$(jq 'length' "$RUNNER_TEMP/review-pr.json")"
+          if [ "$count" -eq 0 ]; then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test "$count" -eq 1
+          jq -e '.[0] | .user.login == "patchraptor[bot]" and .head.repo.full_name == "joshyorko/review" and .head.ref == "patchraptor/omp-runtime"' "$RUNNER_TEMP/review-pr.json" > /dev/null
+          {
+            echo 'active=true'
+            jq -r '.[0] | "head=\(.head.sha)\nbase=\(.base.sha)\nnumber=\(.number)"' "$RUNNER_TEMP/review-pr.json"
+          } >> "$GITHUB_OUTPUT"
+      - name: Fetch and check the candidate
+        if: steps.find.outputs.active == 'true'
+        env:
+          PR_HEAD: ${{ steps.find.outputs.head }}
+          PR_BASE: ${{ steps.find.outputs.base }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_HEAD" =~ ^[0-9a-f]{40}$ && "$PR_BASE" =~ ^[0-9a-f]{40}$ ]]
+          git init review
+          git -C review remote add origin https://github.com/joshyorko/review.git
+          git -C review fetch --no-tags origin "$PR_HEAD" "$PR_BASE"
+          git -C review checkout --detach "$PR_HEAD"
+          test "$(git -C review diff --name-only "$PR_BASE...$PR_HEAD")" = image/appliance/Containerfile
+      - name: Run exact-source qualification
+        if: steps.find.outputs.active == 'true'
+        working-directory: review
+        run: node scripts/qualify-omp-upgrade.mjs --if-stale --record
+      - name: Save qualified receipts
+        if: steps.find.outputs.active == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review-omp-qualified-containerfile
+          path: review/image/appliance/Containerfile
+          if-no-files-found: error
+
+  record-review-omp:
+    name: Record Review OMP qualification on the exact PR head
+    needs: qualify-review-omp
+    if: needs.qualify-review-omp.outputs.active == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted PatchRaptor verification
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: review-omp-qualified-containerfile
+          path: qualified
+      - name: Mint Review-scoped writer token
+        id: review-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        with:
+          client-id: ${{ secrets.RENOVATE_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
+          owner: joshyorko
+          repositories: review
+          permission-contents: write
+          permission-pull-requests: read
+      - name: Verify and push only qualified receipts
+        env:
+          GH_TOKEN: ${{ steps.review-token.outputs.token }}
+          PR_HEAD: ${{ needs.qualify-review-omp.outputs.head }}
+          PR_BASE: ${{ needs.qualify-review-omp.outputs.base }}
+          PR_NUMBER: ${{ needs.qualify-review-omp.outputs.number }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_HEAD" =~ ^[0-9a-f]{40}$ && "$PR_BASE" =~ ^[0-9a-f]{40}$ && "$PR_NUMBER" =~ ^[0-9]+$ ]]
+          gh api "repos/joshyorko/review/pulls/$PR_NUMBER" > "$RUNNER_TEMP/current-pr.json"
+          jq -e --arg head "$PR_HEAD" --arg base "$PR_BASE" '
+            .state == "open" and .user.login == "patchraptor[bot]" and
+            .head.repo.full_name == "joshyorko/review" and .head.ref == "patchraptor/omp-runtime" and
+            .base.ref == "main" and .head.sha == $head and .base.sha == $base
+          ' "$RUNNER_TEMP/current-pr.json" > /dev/null
+          git init review
+          git -C review remote add origin https://github.com/joshyorko/review.git
+          git -C review fetch --no-tags origin "$PR_HEAD" "$PR_BASE"
+          git -C review checkout --detach "$PR_HEAD"
+          test "$(git -C review diff --name-only "$PR_BASE...$PR_HEAD")" = image/appliance/Containerfile
+          python3 scripts/verify-review-qualification.py review review/image/appliance/Containerfile qualified/Containerfile
+          if cmp -s review/image/appliance/Containerfile qualified/Containerfile; then
+            echo 'OMP receipts are already current.'
+            exit 0
+          fi
+          cp qualified/Containerfile review/image/appliance/Containerfile
+          git -C review config user.name 'patchraptor[bot]'
+          git -C review config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C review add image/appliance/Containerfile
+          git -C review commit -m 'fix: qualify OMP compatibility patches'
+          gh auth setup-git
+          git -C review push --force-with-lease="refs/heads/patchraptor/omp-runtime:$PR_HEAD" origin HEAD:refs/heads/patchraptor/omp-runtime
