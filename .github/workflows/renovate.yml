@@ -77,7 +77,7 @@ jobs:
   qualify-review-omp:
     name: Qualify Review OMP update without write credentials
     needs: renovate
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
