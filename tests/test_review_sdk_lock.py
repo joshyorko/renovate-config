@@ -1,6 +1,7 @@
 import importlib.util
 import base64
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -143,7 +144,7 @@ class ReviewSdkLockTest(unittest.TestCase):
             SDK.require_exact_sdk_files(expected, {SDK.SDK_PATHS[0]: expected[0],
                                                    SDK.SDK_PATHS[1]: json.dumps(tampered_lock) + '\n'})
 
-    def git_base(self, sdk_paths=None, include_toolchains=True):
+    def git_base(self, sdk_paths=None, include_toolchains=True, symlink_paths=()):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
@@ -160,6 +161,11 @@ class ReviewSdkLockTest(unittest.TestCase):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
+        target = root / 'outside-qualified-file'
+        for relative in symlink_paths:
+            path = root / relative
+            path.unlink()
+            path.symlink_to(os.path.relpath(target, path.parent))
         subprocess.run(['git', 'init', '-q', str(root)], check=True)
         subprocess.run(['git', '-C', str(root), 'config', 'user.name', 'Test'], check=True)
         subprocess.run(['git', '-C', str(root), 'config', 'user.email', 'test@example.invalid'], check=True)
@@ -202,6 +208,9 @@ class ReviewSdkLockTest(unittest.TestCase):
         root, revision = self.git_base()
         expected = self.expected()
         artifact = root / 'qualified'
+        container_artifact = artifact / SDK.CONTAINERFILE
+        container_artifact.parent.mkdir(parents=True, exist_ok=True)
+        container_artifact.write_text(self.candidate_containerfile)
         for path, content in zip(SDK.SDK_PATHS, expected):
             destination = artifact / path
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -209,6 +218,62 @@ class ReviewSdkLockTest(unittest.TestCase):
         self.assertTrue(SDK.verify_from_base(root, revision, self.candidate_containerfile, artifact, self.generator))
         (artifact / SDK.SDK_PATHS[1]).write_text(self.lock)
         with self.assertRaisesRegex(ValueError, 'independently generated'):
+            SDK.verify_from_base(root, revision, self.candidate_containerfile, artifact, self.generator)
+
+    def symlink_head(self, root, path):
+        if path != SDK.CONTAINERFILE:
+            (root / SDK.CONTAINERFILE).write_text('ARG OMP_VERSION=18.14.0\n')
+            subprocess.run(['git', '-C', str(root), 'add', SDK.CONTAINERFILE], check=True)
+        target = root / 'outside-qualified-file'
+        target.write_text('attacker-controlled target\n')
+        tracked = root / path
+        tracked.unlink()
+        tracked.symlink_to(os.path.relpath(target, tracked.parent))
+        subprocess.run(['git', '-C', str(root), 'add', path], check=True)
+        subprocess.run(['git', '-C', str(root), 'commit', '-qm', 'replace allowed path with symlink'], check=True)
+        return subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'],
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    def test_rejects_symlinked_containerfile_and_sdk_candidate_entries(self):
+        for path in (SDK.CONTAINERFILE, SDK.SDK_PATHS[0], SDK.SDK_PATHS[1]):
+            root, base = self.git_base()
+            head = self.symlink_head(root, path)
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'regular Git blob'):
+                SDK.validate_git_changes(root, base, head)
+
+    def test_rejects_symlinked_trusted_base_entries(self):
+        for path in (SDK.CONTAINERFILE, *SDK.SDK_PATHS):
+            root, revision = self.git_base(symlink_paths=(path,))
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'regular Git blob'):
+                if path == SDK.CONTAINERFILE:
+                    SDK.validate_git_changes(root, revision, revision)
+                else:
+                    SDK.base_sdk_files(root, revision)
+
+    def test_writer_rejects_symlinked_sdk_artifact_entries(self):
+        root, revision = self.git_base()
+        expected = self.expected()
+        artifact = root / 'qualified'
+        outside = root / 'outside-qualified-file'
+        outside.write_text(expected[0])
+        container_artifact = artifact / SDK.CONTAINERFILE
+        container_artifact.parent.mkdir(parents=True, exist_ok=True)
+        container_artifact.write_text(self.candidate_containerfile)
+        (artifact / 'ci/sdk-types').mkdir(parents=True)
+        (artifact / SDK.SDK_PATHS[0]).symlink_to(outside)
+        (artifact / SDK.SDK_PATHS[1]).write_text(expected[1])
+        with self.assertRaisesRegex(ValueError, 'qualified artifact contains a symlink'):
+            SDK.verify_from_base(root, revision, self.candidate_containerfile, artifact, self.generator)
+
+    def test_writer_rejects_symlinked_containerfile_artifact(self):
+        root, revision = self.git_base()
+        artifact = root / 'qualified'
+        outside = root / 'outside-qualified-file'
+        outside.write_text(self.candidate_containerfile)
+        container_artifact = artifact / SDK.CONTAINERFILE
+        container_artifact.parent.mkdir(parents=True, exist_ok=True)
+        container_artifact.symlink_to(os.path.relpath(outside, container_artifact.parent))
+        with self.assertRaisesRegex(ValueError, 'qualified artifact contains a symlink'):
             SDK.verify_from_base(root, revision, self.candidate_containerfile, artifact, self.generator)
 
 

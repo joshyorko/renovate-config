@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -199,11 +200,41 @@ def git_show(root, revision, path):
     return result.stdout
 
 
+def git_entry_mode(root, revision, path):
+    result = subprocess.run(
+        ['git', '-C', str(root), 'ls-tree', '--full-tree', '--format=%(objectmode):%(objecttype)', revision, '--', path],
+        capture_output=True, text=True,
+    )
+    if result.returncode:
+        raise ValueError(f'cannot inspect Git tree entry {revision}:{path}: {result.stderr.strip()}')
+    entries = result.stdout.splitlines()
+    if len(entries) != 1:
+        return None
+    return entries[0]
+
+
+def require_regular_git_blob(root, revision, path):
+    if git_entry_mode(root, revision, path) != '100644:blob':
+        raise ValueError(f'{path}: expected a regular Git blob with mode 100644 in {revision}')
+
+
+def require_git_directories(root, revision, paths):
+    for path in paths:
+        mode = git_entry_mode(root, revision, path)
+        if mode is not None and mode != '040000:tree':
+            raise ValueError(f'{path}: expected a real Git tree in {revision}')
+
+
 def base_sdk_files(root, base_ref):
+    require_git_directories(root, base_ref, ('ci', 'ci/sdk-types'))
     found = {}
     for path in SDK_PATHS:
         try:
-            found[path] = git_show(root, base_ref, path)
+            if git_entry_mode(root, base_ref, path) is None:
+                found[path] = None
+            else:
+                require_regular_git_blob(root, base_ref, path)
+                found[path] = git_show(root, base_ref, path)
         except FileNotFoundError:
             found[path] = None
     enabled = sdk_lock_enabled(path for path in SDK_PATHS if found[path] is not None)
@@ -211,10 +242,36 @@ def base_sdk_files(root, base_ref):
         return None
     for path in (CONTAINERFILE, TOOLCHAINS):
         try:
+            require_regular_git_blob(root, base_ref, path)
             found[path] = git_show(root, base_ref, path)
         except FileNotFoundError as error:
             raise ValueError(f'trusted Review base is missing required file {path}') from error
     return found
+
+
+def artifact_entry_exists(root, relative_path):
+    current = Path(root)
+    try:
+        root_mode = current.lstat().st_mode
+    except FileNotFoundError:
+        return False
+    if stat.S_ISLNK(root_mode) or not stat.S_ISDIR(root_mode):
+        raise ValueError('qualified artifact root must be a real directory')
+    parts = Path(relative_path).parts
+    for index, part in enumerate(parts):
+        current = current / part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            return False
+        if stat.S_ISLNK(mode):
+            raise ValueError(f'{relative_path}: qualified artifact contains a symlink')
+        if index < len(parts) - 1:
+            if not stat.S_ISDIR(mode):
+                raise ValueError(f'{relative_path}: qualified artifact path parent is not a directory')
+        elif not stat.S_ISREG(mode):
+            raise ValueError(f'{relative_path}: qualified artifact entry is not a regular non-symlink artifact file')
+    return True
 
 
 def synchronize_from_base(root, base_ref, candidate_containerfile, generate=_generate_lock_with_pinned_npm):
@@ -231,27 +288,34 @@ def synchronize_from_base(root, base_ref, candidate_containerfile, generate=_gen
 
 
 def verify_from_base(root, base_ref, candidate_containerfile, artifact_root, generate=_generate_lock_with_pinned_npm):
-    base = base_sdk_files(root, base_ref)
     artifact_root = Path(artifact_root)
+    if not artifact_entry_exists(artifact_root, CONTAINERFILE):
+        raise ValueError('qualified artifact is missing the Containerfile')
+    if (artifact_root / CONTAINERFILE).read_text() != candidate_containerfile:
+        raise ValueError('qualified Containerfile artifact differs from the verified bytes')
+    base = base_sdk_files(root, base_ref)
     if base is None:
-        if any((artifact_root / path).exists() for path in SDK_PATHS):
+        if any(artifact_entry_exists(artifact_root, path) for path in SDK_PATHS):
             raise ValueError('legacy Containerfile-only qualification artifact contains untrusted SDK files')
         return False
     expected = expected_sdk_files(base[SDK_PATHS[0]], base[SDK_PATHS[1]], base[TOOLCHAINS],
                                   base[CONTAINERFILE], candidate_containerfile, generate=generate)
     candidate = {path: (artifact_root / path).read_text() for path in SDK_PATHS
-                 if (artifact_root / path).is_file()}
+                 if artifact_entry_exists(artifact_root, path)}
     require_exact_sdk_files(expected, candidate)
     return True
 
 
 def validate_git_changes(root, base_ref, head_ref):
+    require_regular_git_blob(root, base_ref, CONTAINERFILE)
     base = base_sdk_files(root, base_ref)
     enabled = base is not None
     result = subprocess.run(['git', '-C', str(root), 'diff', '--name-only', f'{base_ref}...{head_ref}'],
                             check=True, capture_output=True, text=True)
     paths = result.stdout.splitlines()
     validate_changed_paths(paths, enabled)
+    for path in (CONTAINERFILE, *(SDK_PATHS if enabled else ())):
+        require_regular_git_blob(root, head_ref, path)
     return enabled
 
 
