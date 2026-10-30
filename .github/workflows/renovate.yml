@@ -10,9 +10,11 @@ on:
       - "renovate-config.json"
       - "org-inherited-config.json"
       - "scripts/sync-review-omp-pins.py"
+      - "scripts/review-sdk-lock.py"
       - "scripts/verify-review-qualification.py"
       - "tests/test_review_pin_sync.py"
       - "tests/test_review_qualification.py"
+      - "tests/test_review_sdk_lock.py"
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
@@ -75,7 +77,7 @@ jobs:
           configurationFile: ./renovate-config.json
 
   qualification-tests:
-    name: Review qualification receipt tests
+    name: Review qualification contract tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,6 +87,7 @@ jobs:
           persist-credentials: false
       - run: python3 tests/test_review_qualification.py
       - run: python3 tests/test_review_pin_sync.py
+      - run: python3 tests/test_review_sdk_lock.py
 
   qualify-review-omp:
     name: Qualify Review OMP update without write credentials
@@ -141,7 +144,7 @@ jobs:
           git -C review remote add origin https://github.com/joshyorko/review.git
           git -C review fetch --no-tags origin "$PR_HEAD" "$PR_BASE"
           git -C review checkout --detach "$PR_HEAD"
-          test "$(git -C review diff --name-only "$PR_BASE...$PR_HEAD")" = image/appliance/Containerfile
+          python3 scripts/review-sdk-lock.py check-changes review "$PR_BASE" "$PR_HEAD"
       - name: Synchronize published OMP pins from trusted PatchRaptor code
         id: sync
         if: steps.find.outputs.active == 'true'
@@ -155,9 +158,23 @@ jobs:
               exit 1
             }
           cat "$RUNNER_TEMP/review-omp-pin-sync.log"
+      - name: Synchronize SDK manifest and lock from trusted Review base
+        id: sdk_sync
+        if: steps.find.outputs.active == 'true' && steps.sync.outcome == 'success'
+        env:
+          PR_BASE: ${{ steps.find.outputs.base }}
+        run: |
+          set -euo pipefail
+          python3 scripts/review-sdk-lock.py synchronize review "$PR_BASE" \
+            review/image/appliance/Containerfile \
+            > "$RUNNER_TEMP/review-omp-sdk-lock.log" 2>&1 || {
+              cat "$RUNNER_TEMP/review-omp-sdk-lock.log"
+              exit 1
+            }
+          cat "$RUNNER_TEMP/review-omp-sdk-lock.log"
       - name: Run exact-source qualification
         id: qualify
-        if: steps.find.outputs.active == 'true' && steps.sync.outcome == 'success'
+        if: steps.find.outputs.active == 'true' && steps.sync.outcome == 'success' && steps.sdk_sync.outcome == 'success'
         working-directory: review
         run: |
           node scripts/qualify-omp-upgrade.mjs --record > "$RUNNER_TEMP/review-omp-qualification.log" 2>&1 || {
@@ -168,8 +185,10 @@ jobs:
         if: always() && steps.find.outputs.active == 'true'
         env:
           SYNC_OUTCOME: ${{ steps.sync.outcome }}
+          SDK_SYNC_OUTCOME: ${{ steps.sdk_sync.outcome }}
           QUALIFY_OUTCOME: ${{ steps.qualify.outcome }}
           PR_HEAD: ${{ steps.find.outputs.head }}
+          QUALIFICATION_ONLY: ${{ inputs['qualification-only'] == true }}
         run: |
           set -euo pipefail
           if [ "$SYNC_OUTCOME" = failure ]; then
@@ -184,18 +203,28 @@ jobs:
               echo
               printf 'Published OMP pins resolved, but exact-source patch/build/canary qualification failed for PR head %s. No Review write was attempted. See the review-omp-qualification-logs artifact.\n' "$PR_HEAD"
             } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$SDK_SYNC_OUTCOME" = failure ]; then
+            {
+              echo '## Review OMP qualification failed: trusted SDK lock synchronization'
+              echo
+              printf 'Published OMP pins resolved, but the SDK manifest/lock could not be reproduced from the trusted Review base for PR head %s. No qualification or Review write was attempted. See the review-omp-qualification-logs artifact.\n' "$PR_HEAD"
+            } >> "$GITHUB_STEP_SUMMARY"
           elif [ "$QUALIFY_OUTCOME" = success ]; then
             {
               echo '## Review OMP qualification passed'
               echo
-              printf 'Published pins synchronized and exact-source patch/build/canary qualification passed for PR head %s. The separate writer will recheck the exact PR head and independently resolve the allowed pin changes.\n' "$PR_HEAD"
+              if [ "$QUALIFICATION_ONLY" = true ]; then
+                printf 'Published pins synchronized and exact-source patch/build/canary qualification passed for PR head %s. Qualification-only mode intentionally skipped the writer.\n' "$PR_HEAD"
+              else
+                printf 'Published pins synchronized and exact-source patch/build/canary qualification passed for PR head %s. The separate writer will recheck the exact PR head and independently verify the OMP pins, receipts, and trusted-base SDK lock.\n' "$PR_HEAD"
+              fi
             } >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [ "$SYNC_OUTCOME" = failure ] || [ "$QUALIFY_OUTCOME" = failure ]; then
+          if [ "$SYNC_OUTCOME" = failure ] || [ "$SDK_SYNC_OUTCOME" = failure ] || [ "$QUALIFY_OUTCOME" = failure ]; then
             {
               printf '\n### Failure details\n\n'
               echo '```text'
-              for log in "$RUNNER_TEMP/review-omp-pin-sync.log" "$RUNNER_TEMP/review-omp-qualification.log"; do
+              for log in "$RUNNER_TEMP/review-omp-pin-sync.log" "$RUNNER_TEMP/review-omp-sdk-lock.log" "$RUNNER_TEMP/review-omp-qualification.log"; do
                 if [ -f "$log" ]; then tail -n 25 "$log"; fi
               done
               echo '```'
@@ -209,12 +238,26 @@ jobs:
           path: ${{ runner.temp }}/review-omp-*.log
           if-no-files-found: warn
           retention-days: 14
+      - name: Stage qualified receipt files
+        if: steps.find.outputs.active == 'true' && steps.qualify.outcome == 'success'
+        id: artifact
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/review-omp-qualified"
+          mkdir -p "$output/image/appliance"
+          cp review/image/appliance/Containerfile "$output/image/appliance/Containerfile"
+          if [ -f review/ci/sdk-types/package.json ] || [ -f review/ci/sdk-types/package-lock.json ]; then
+            test -f review/ci/sdk-types/package.json
+            test -f review/ci/sdk-types/package-lock.json
+            mkdir -p "$output/ci/sdk-types"
+            cp review/ci/sdk-types/package.json review/ci/sdk-types/package-lock.json "$output/ci/sdk-types/"
+          fi
       - name: Save qualified receipts
         if: steps.find.outputs.active == 'true' && steps.qualify.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: review-omp-qualified-containerfile
-          path: review/image/appliance/Containerfile
+          name: review-omp-qualified-files
+          path: ${{ runner.temp }}/review-omp-qualified/**
           if-no-files-found: error
 
   record-review-omp:
@@ -232,25 +275,17 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: review-omp-qualified-containerfile
+          name: review-omp-qualified-files
           path: qualified
-      - name: Mint Review-scoped writer token
-        id: review-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
-        with:
-          client-id: ${{ secrets.RENOVATE_CLIENT_ID }}
-          private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
-          owner: joshyorko
-          repositories: review
-          permission-contents: write
-          permission-pull-requests: read
-      - name: Verify and push only qualified receipts
+      - name: Verify exact candidate and SDK lock before writer token
+        id: verify
         env:
-          GH_TOKEN: ${{ steps.review-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           PR_HEAD: ${{ needs.qualify-review-omp.outputs.head }}
           PR_BASE: ${{ needs.qualify-review-omp.outputs.base }}
           PR_NUMBER: ${{ needs.qualify-review-omp.outputs.number }}
         run: |
+          exec > "$RUNNER_TEMP/review-omp-writer-verification.log" 2>&1
           set -euo pipefail
           [[ "$PR_HEAD" =~ ^[0-9a-f]{40}$ && "$PR_BASE" =~ ^[0-9a-f]{40}$ && "$PR_NUMBER" =~ ^[0-9]+$ ]]
           gh api "repos/joshyorko/review/pulls/$PR_NUMBER" > "$RUNNER_TEMP/current-pr.json"
@@ -263,16 +298,75 @@ jobs:
           git -C review remote add origin https://github.com/joshyorko/review.git
           git -C review fetch --no-tags origin "$PR_HEAD" "$PR_BASE"
           git -C review checkout --detach "$PR_HEAD"
-          test "$(git -C review diff --name-only "$PR_BASE...$PR_HEAD")" = image/appliance/Containerfile
-          python3 scripts/verify-review-qualification.py review review/image/appliance/Containerfile qualified/Containerfile
-          if cmp -s review/image/appliance/Containerfile qualified/Containerfile; then
-            echo 'OMP receipts are already current.'
+          python3 scripts/review-sdk-lock.py check-changes review "$PR_BASE" "$PR_HEAD"
+          python3 scripts/verify-review-qualification.py review review/image/appliance/Containerfile \
+            qualified/image/appliance/Containerfile --base-ref "$PR_BASE" --qualified-root qualified
+      - name: Retain writer verification log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review-omp-writer-verification-log
+          path: ${{ runner.temp }}/review-omp-writer-verification.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Summarize writer verification failure
+        if: always() && steps.verify.outcome == 'failure'
+        run: |
+          {
+            echo '## Review OMP writer verification failed'
+            echo
+            echo 'The exact PR or independently regenerated SDK lock did not match the qualified artifact. No Review writer token was minted. See artifact review-omp-writer-verification-log.'
+            echo
+            echo '```text'
+            tail -n 30 "$RUNNER_TEMP/review-omp-writer-verification.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Mint Review-scoped writer token
+        id: review-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        with:
+          client-id: ${{ secrets.RENOVATE_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
+          owner: joshyorko
+          repositories: review
+          permission-contents: write
+          permission-pull-requests: read
+      - name: Recheck exact candidate and push qualified files
+        env:
+          GH_TOKEN: ${{ steps.review-token.outputs.token }}
+          PR_HEAD: ${{ needs.qualify-review-omp.outputs.head }}
+          PR_BASE: ${{ needs.qualify-review-omp.outputs.base }}
+          PR_NUMBER: ${{ needs.qualify-review-omp.outputs.number }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_HEAD" =~ ^[0-9a-f]{40}$ && "$PR_BASE" =~ ^[0-9a-f]{40}$ && "$PR_NUMBER" =~ ^[0-9]+$ ]]
+          gh api "repos/joshyorko/review/pulls/$PR_NUMBER" > "$RUNNER_TEMP/current-pr-before-push.json"
+          jq -e --arg head "$PR_HEAD" --arg base "$PR_BASE" '
+            .state == "open" and .user.login == "patchraptor[bot]" and
+            .head.repo.full_name == "joshyorko/review" and .head.ref == "patchraptor/omp-runtime" and
+            .base.ref == "main" and .head.sha == $head and .base.sha == $base
+          ' "$RUNNER_TEMP/current-pr-before-push.json" > /dev/null
+          if cmp -s review/image/appliance/Containerfile qualified/image/appliance/Containerfile; then
+            if [ ! -f qualified/ci/sdk-types/package.json ] || \
+               { cmp -s review/ci/sdk-types/package.json qualified/ci/sdk-types/package.json && \
+                 cmp -s review/ci/sdk-types/package-lock.json qualified/ci/sdk-types/package-lock.json; }; then
+              echo 'OMP qualification receipts and SDK lock are already current.'
+              exit 0
+            fi
+          fi
+          cp qualified/image/appliance/Containerfile review/image/appliance/Containerfile
+          git -C review add image/appliance/Containerfile
+          if [ -f qualified/ci/sdk-types/package.json ]; then
+            mkdir -p review/ci/sdk-types
+            cp qualified/ci/sdk-types/package.json qualified/ci/sdk-types/package-lock.json review/ci/sdk-types/
+            git -C review add ci/sdk-types/package.json ci/sdk-types/package-lock.json
+          fi
+          if git -C review diff --cached --quiet; then
+            echo 'No qualified file changes to record.'
             exit 0
           fi
-          cp qualified/Containerfile review/image/appliance/Containerfile
           git -C review config user.name 'patchraptor[bot]'
           git -C review config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C review add image/appliance/Containerfile
           git -C review commit -m 'fix: qualify OMP compatibility patches'
           gh auth setup-git
           git -C review push --force-with-lease="refs/heads/patchraptor/omp-runtime:$PR_HEAD" origin HEAD:refs/heads/patchraptor/omp-runtime

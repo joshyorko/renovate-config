@@ -10,6 +10,10 @@ SYNC_PATH = Path(__file__).with_name('sync-review-omp-pins.py')
 SYNC_SPEC = importlib.util.spec_from_file_location('sync_review_omp_pins', SYNC_PATH)
 SYNC = importlib.util.module_from_spec(SYNC_SPEC)
 SYNC_SPEC.loader.exec_module(SYNC)
+SDK_PATH = Path(__file__).with_name('review-sdk-lock.py')
+SDK_SPEC = importlib.util.spec_from_file_location('review_sdk_lock', SDK_PATH)
+SDK = importlib.util.module_from_spec(SDK_SPEC)
+SDK_SPEC.loader.exec_module(SDK)
 
 
 def value(text, name):
@@ -26,7 +30,7 @@ def optional_value(text, name, default):
     return found[0] if found else default
 
 
-def verify(root, before, after, resolve=SYNC.published_pins):
+def verify(root, before, after, resolve=SYNC.published_pins, base_ref=None, qualified_root=None):
     # Resolve again in the writer job. The qualification artifact is not a
     # trusted source of the newly published release and platform digests.
     synchronized = SYNC.synchronize(before, resolve)
@@ -60,12 +64,23 @@ def verify(root, before, after, resolve=SYNC.published_pins):
             raise ValueError(f'invalid {name} pin')
     if after != result:
         raise ValueError('qualification result changes more than independently resolved OMP pins and patch receipts')
+    if base_ref is not None:
+        if qualified_root is None:
+            raise ValueError('qualified SDK artifact directory is required with a trusted base ref')
+        SDK.verify_from_base(root, base_ref, after, qualified_root)
 
 
 if __name__ == '__main__':
     try:
-        if len(sys.argv) != 4:
-            raise ValueError('usage: verify-review-qualification.py REVIEW_ROOT BEFORE_CONTAINERFILE AFTER_CONTAINERFILE')
-        verify(Path(sys.argv[1]), Path(sys.argv[2]).read_text(), Path(sys.argv[3]).read_text())
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('review_root', type=Path)
+        parser.add_argument('before_containerfile', type=Path)
+        parser.add_argument('after_containerfile', type=Path)
+        parser.add_argument('--base-ref')
+        parser.add_argument('--qualified-root', type=Path)
+        args = parser.parse_args()
+        verify(args.review_root, args.before_containerfile.read_text(), args.after_containerfile.read_text(),
+               base_ref=args.base_ref, qualified_root=args.qualified_root)
     except (OSError, ValueError) as error:
         sys.exit(str(error))

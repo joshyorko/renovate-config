@@ -15,6 +15,10 @@ dispatch in this repo.
 The Renovate workflow also supports a `qualification-only` manual dispatch
 input. Enable it to qualify the existing Review OMP update from a selected
 central branch without running Renovate or writing qualification receipts.
+When the trusted Review PR base contains both `ci/sdk-types/package.json` and
+`ci/sdk-types/package-lock.json`, qualification reproduces the SDK lock from
+that base with its pinned Node/npm toolchain. Older bases without either file
+retain the Containerfile-only qualification contract; a partial base pair fails.
 
 Patchraptor uses `patchraptor/` for Renovate branch names. Project Bluefin's bot
 identity is branded, but its live dependency PR branches still use Renovate's
