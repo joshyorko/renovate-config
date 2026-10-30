@@ -5,9 +5,14 @@ on:
     branches:
       - main
     paths:
+      - "README.md"
       - ".github/workflows/renovate.yml"
       - "renovate-config.json"
       - "org-inherited-config.json"
+      - "scripts/sync-review-omp-pins.py"
+      - "scripts/verify-review-qualification.py"
+      - "tests/test_review_pin_sync.py"
+      - "tests/test_review_qualification.py"
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
@@ -20,6 +25,11 @@ on:
         options:
           - info
           - debug
+      qualification-only:
+        description: "Qualify the existing Review OMP PR without running Renovate or writing receipts"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: patchraptor-renovate
@@ -29,6 +39,7 @@ jobs:
   renovate:
     name: Patchraptor dependency sweep
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs['qualification-only'] != true
     steps:
       - name: Get Token
         id: get-token
@@ -73,11 +84,19 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 tests/test_review_qualification.py
+      - run: python3 tests/test_review_pin_sync.py
 
   qualify-review-omp:
     name: Qualify Review OMP update without write credentials
     needs: renovate
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      always() && !cancelled() &&
+      (needs.renovate.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && inputs['qualification-only'] == true &&
+        needs.renovate.result == 'skipped')) &&
+      ((github.event_name != 'pull_request' && github.ref == 'refs/heads/main' &&
+        !(github.event_name == 'workflow_dispatch' && inputs['qualification-only'] == true)) ||
+       (github.event_name == 'workflow_dispatch' && inputs['qualification-only'] == true))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -88,6 +107,10 @@ jobs:
       base: ${{ steps.find.outputs.base }}
       number: ${{ steps.find.outputs.number }}
     steps:
+      - name: Checkout trusted PatchRaptor qualification code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Find the exact PatchRaptor OMP PR
         id: find
         env:
@@ -119,12 +142,75 @@ jobs:
           git -C review fetch --no-tags origin "$PR_HEAD" "$PR_BASE"
           git -C review checkout --detach "$PR_HEAD"
           test "$(git -C review diff --name-only "$PR_BASE...$PR_HEAD")" = image/appliance/Containerfile
+      - name: Synchronize published OMP pins from trusted PatchRaptor code
+        id: sync
+        if: steps.find.outputs.active == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-review-omp-pins.py review/image/appliance/Containerfile \
+            > "$RUNNER_TEMP/review-omp-pin-sync.log" 2>&1 || {
+              cat "$RUNNER_TEMP/review-omp-pin-sync.log"
+              exit 1
+            }
+          cat "$RUNNER_TEMP/review-omp-pin-sync.log"
       - name: Run exact-source qualification
-        if: steps.find.outputs.active == 'true'
+        id: qualify
+        if: steps.find.outputs.active == 'true' && steps.sync.outcome == 'success'
         working-directory: review
-        run: node scripts/qualify-omp-upgrade.mjs --if-stale --record
+        run: |
+          node scripts/qualify-omp-upgrade.mjs --record > "$RUNNER_TEMP/review-omp-qualification.log" 2>&1 || {
+            cat "$RUNNER_TEMP/review-omp-qualification.log"
+            exit 1
+          }
+      - name: Report qualification stage
+        if: always() && steps.find.outputs.active == 'true'
+        env:
+          SYNC_OUTCOME: ${{ steps.sync.outcome }}
+          QUALIFY_OUTCOME: ${{ steps.qualify.outcome }}
+          PR_HEAD: ${{ steps.find.outputs.head }}
+        run: |
+          set -euo pipefail
+          if [ "$SYNC_OUTCOME" = failure ]; then
+            {
+              echo '## Review OMP qualification failed: published pins unavailable'
+              echo
+              printf 'PatchRaptor could not resolve or validate the published OMP source, archive, or native package pins for PR head %s. No qualification ran and no Review write was attempted. See the review-omp-qualification-logs artifact.\n' "$PR_HEAD"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$QUALIFY_OUTCOME" = failure ]; then
+            {
+              echo '## Review OMP qualification failed: patch/build/canary stage'
+              echo
+              printf 'Published OMP pins resolved, but exact-source patch/build/canary qualification failed for PR head %s. No Review write was attempted. See the review-omp-qualification-logs artifact.\n' "$PR_HEAD"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$QUALIFY_OUTCOME" = success ]; then
+            {
+              echo '## Review OMP qualification passed'
+              echo
+              printf 'Published pins synchronized and exact-source patch/build/canary qualification passed for PR head %s. The separate writer will recheck the exact PR head and independently resolve the allowed pin changes.\n' "$PR_HEAD"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$SYNC_OUTCOME" = failure ] || [ "$QUALIFY_OUTCOME" = failure ]; then
+            {
+              printf '\n### Failure details\n\n'
+              echo '```text'
+              for log in "$RUNNER_TEMP/review-omp-pin-sync.log" "$RUNNER_TEMP/review-omp-qualification.log"; do
+                if [ -f "$log" ]; then tail -n 25 "$log"; fi
+              done
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain qualification logs
+        if: always() && steps.find.outputs.active == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review-omp-qualification-logs
+          path: ${{ runner.temp }}/review-omp-*.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Save qualified receipts
-        if: steps.find.outputs.active == 'true'
+        if: steps.find.outputs.active == 'true' && steps.qualify.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: review-omp-qualified-containerfile
@@ -134,7 +220,8 @@ jobs:
   record-review-omp:
     name: Record Review OMP qualification on the exact PR head
     needs: qualify-review-omp
-    if: needs.qualify-review-omp.outputs.active == 'true'
+    if: needs.qualify-review-omp.outputs.active == 'true' &&
+      !(github.event_name == 'workflow_dispatch' && inputs['qualification-only'] == true)
     runs-on: ubuntu-latest
     permissions:
       contents: read
