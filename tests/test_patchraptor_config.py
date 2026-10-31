@@ -35,6 +35,21 @@ DEPLOY_IMAGES = """{
 """
 
 
+def render_replacement(template, values):
+    for variable in ("newValue", "newDigest"):
+        template = re.sub(
+            rf"{{{{#if {variable}}}}}(.*?){{{{else}}}}(.*?){{{{/if}}}}",
+            lambda match: match.group(1) if values.get(variable) else match.group(2),
+            template,
+            flags=re.DOTALL,
+        )
+    return re.sub(
+        r"{{{([A-Za-z][A-Za-z0-9_]*)}}}",
+        lambda match: values[match.group(1)],
+        template,
+    )
+
+
 class PatchraptorTargetConfigTest(unittest.TestCase):
     def test_discovery_is_explicit_and_keeps_existing_repositories(self):
         self.assertTrue(RENOVATE["autodiscover"])
@@ -145,12 +160,39 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
             extracted.append(match.groupdict())
 
             template = manager["autoReplaceStringTemplate"]
-            self.assertIn("{{{depName}}}:", template)
-            self.assertIn("{{#if newDigest}}@{{{newDigest}}}{{/if}}", template)
-            if match.group("depName") == "ghcr.io/openai/tunnel-client":
-                self.assertIn(":v{{#if newValue}}", template)
-            else:
-                self.assertIn(":{{#if newValue}}", template)
+            self.assertIn('"repository":', template)
+            self.assertIn('"digest":', template)
+            self.assertIn("{{#if newDigest}}", template)
+            self.assertIn("{{else}}{{{currentDigest}}}", template)
+
+            replacement_values = {
+                **match.groupdict(),
+                "newValue": "9.8.7",
+                "newDigest": "sha256:" + "0" * 64,
+            }
+            replacement = render_replacement(template, replacement_values)
+            updated_manifest = (
+                DEPLOY_IMAGES[: match.start()]
+                + replacement
+                + DEPLOY_IMAGES[match.end() :]
+            )
+            updated = json.loads(updated_manifest)["images"]
+            image_key = (
+                "executor"
+                if match.group("depName")
+                == "ghcr.io/usefulsoftwareco/executor-selfhost"
+                else "tunnel"
+            )
+            tag_prefix = "v" if image_key == "tunnel" else ""
+            self.assertEqual(
+                updated[image_key]["repository"],
+                f"{match.group('depName')}:{tag_prefix}9.8.7",
+            )
+            self.assertEqual(
+                updated[image_key]["digest"], "sha256:" + "0" * 64
+            )
+            for cas_key in ("cas", "schema_proxy"):
+                self.assertEqual(updated[cas_key], json.loads(DEPLOY_IMAGES)["images"][cas_key])
 
         self.assertEqual(
             extracted,
