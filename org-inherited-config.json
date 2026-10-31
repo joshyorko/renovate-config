@@ -12,6 +12,34 @@
   "prCreation": "immediate",
   "prHourlyLimit": 0,
   "platformAutomerge": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track the executor deployment image tag and digest pair in tunnel-kit's production image manifest.",
+      "managerFilePatterns": [
+        "/^config\\/deploy-images\\.json$/"
+      ],
+      "matchStrings": [
+        "\\\"executor\\\"\\s*:\\s*\\{\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/usefulsoftwareco/executor-selfhost):(?<currentValue>[^\\\"@]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "{{{depName}}}:{{#if newValue}}{{{newValue}}}{{else}}{{{currentValue}}}{{/if}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the version-prefixed tunnel deployment image tag and digest pair in tunnel-kit's production image manifest.",
+      "managerFilePatterns": [
+        "/^config\\/deploy-images\\.json$/"
+      ],
+      "matchStrings": [
+        "\\\"tunnel\\\"\\s*:\\s*\\{\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/openai/tunnel-client):v(?<currentValue>[^\\\"@]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "{{{depName}}}:v{{#if newValue}}{{{newValue}}}{{else}}{{{currentValue}}}{{/if}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
+    }
+  ],
   "packageRules": [
     {
       "automerge": true,
@@ -83,6 +111,82 @@
       "matchManagers": [
         "gomod"
       ]
+    },
+    {
+      "description": [
+        "CAS and tunnel-kit changes carry native runtime or production deployment risk; never inherit Patchraptor's central automerge rules."
+      ],
+      "matchRepositories": [
+        "joshyorko/codex-action-server",
+        "joshyorko/mcp-tunnel-kit"
+      ],
+      "automerge": false,
+      "platformAutomerge": false
+    },
+    {
+      "description": [
+        "CAS toolchain, Python runtime, base image, and GitHub Actions upgrades require dashboard approval and successful repository CI before a PR is opened."
+      ],
+      "matchRepositories": [
+        "joshyorko/codex-action-server"
+      ],
+      "matchManagers": [
+        "dockerfile",
+        "github-actions",
+        "pep621",
+        "pip_requirements"
+      ],
+      "dependencyDashboardApproval": true,
+      "prCreation": "status-success",
+      "automerge": false,
+      "platformAutomerge": false
+    },
+    {
+      "description": [
+        "Tunnel-kit image and workflow updates require dashboard approval and successful repository CI before a PR is opened."
+      ],
+      "matchRepositories": [
+        "joshyorko/mcp-tunnel-kit"
+      ],
+      "matchManagers": [
+        "custom.regex",
+        "docker-compose",
+        "dockerfile",
+        "github-actions"
+      ],
+      "dependencyDashboardApproval": true,
+      "prCreation": "status-success",
+      "automerge": false,
+      "platformAutomerge": false
+    },
+    {
+      "description": [
+        "Only the trusted CAS promotion handoff may update the production CAS image and its source revision."
+      ],
+      "matchRepositories": [
+        "joshyorko/mcp-tunnel-kit"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/joshyorko/codex-action-server"
+      ],
+      "enabled": false
+    },
+    {
+      "description": [
+        "Keep tunnel-kit's tracked deployment image updates grouped across image manifest and Compose references."
+      ],
+      "matchRepositories": [
+        "joshyorko/mcp-tunnel-kit"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/usefulsoftwareco/executor-selfhost",
+        "ghcr.io/openai/tunnel-client"
+      ],
+      "groupName": "Tunnel-kit deployment images",
+      "dependencyDashboardApproval": true,
+      "prCreation": "status-success",
+      "automerge": false,
+      "platformAutomerge": false
     }
   ]
 }

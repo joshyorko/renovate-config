@@ -15,6 +15,7 @@ on:
       - "tests/test_review_pin_sync.py"
       - "tests/test_review_qualification.py"
       - "tests/test_review_sdk_lock.py"
+      - "tests/test_patchraptor_config.py"
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
@@ -88,6 +89,7 @@ jobs:
       - run: python3 tests/test_review_qualification.py
       - run: python3 tests/test_review_pin_sync.py
       - run: python3 tests/test_review_sdk_lock.py
+      - run: python3 tests/test_patchraptor_config.py
 
   qualify-review-omp:
     name: Qualify Review OMP update without write credentials
