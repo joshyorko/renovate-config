@@ -1,12 +1,23 @@
 import json
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.verify_patchraptor_repository_visibility import (
+    REQUIRED_TARGETS,
+    missing_targets,
+    repository_names,
+)
+
+
 RENOVATE = json.loads((ROOT / "renovate-config.json").read_text())
 INHERITED = json.loads((ROOT / "org-inherited-config.json").read_text())
+WORKFLOW = (ROOT / ".github/workflows/renovate.yml").read_text()
 
 # Current source from joshyorko/mcp-tunnel-kit/config/deploy-images.json.
 DEPLOY_IMAGES = """{
@@ -70,6 +81,8 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
             ],
         )
         self.assertNotIn("*", RENOVATE["autodiscoverFilter"])
+        self.assertEqual(RENOVATE["requireConfig"], "required")
+        self.assertTrue(REQUIRED_TARGETS.issubset(RENOVATE["autodiscoverFilter"]))
         self.assertEqual(
             RENOVATE["allowedCommands"],
             [
@@ -81,6 +94,48 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
                 "^node scripts/update-typesafe-pins\\.mjs$",
             ],
         )
+
+    def test_installation_visibility_preflight_is_bounded_and_wired(self):
+        self.assertEqual(
+            REQUIRED_TARGETS,
+            {
+                "joshyorko/codex-action-server",
+                "joshyorko/mcp-tunnel-kit",
+            },
+        )
+        self.assertEqual(missing_targets([]), tuple(sorted(REQUIRED_TARGETS)))
+        self.assertEqual(
+            missing_targets(["joshyorko/codex-action-server"]),
+            ("joshyorko/mcp-tunnel-kit",),
+        )
+        self.assertEqual(missing_targets(REQUIRED_TARGETS), ())
+        response = [
+            {"repositories": [{"full_name": "joshyorko/codex-action-server"}]},
+            {"repositories": [{"full_name": "joshyorko/mcp-tunnel-kit"}]},
+        ]
+        self.assertEqual(set(repository_names(response)), REQUIRED_TARGETS)
+        self.assertEqual(missing_targets(repository_names(response)), ())
+        with self.assertRaises(ValueError):
+            repository_names({"repositories": [{}]})
+
+        missing = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/verify_patchraptor_repository_visibility.py"),
+            ],
+            input=json.dumps({"repositories": []}),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("joshyorko/codex-action-server", missing.stderr)
+        self.assertIn("joshyorko/mcp-tunnel-kit", missing.stderr)
+        self.assertIn("/installation/repositories", WORKFLOW)
+        self.assertIn(
+            "scripts/verify_patchraptor_repository_visibility.py", WORKFLOW
+        )
+        self.assertIn("GH_TOKEN: ${{ steps.get-token.outputs.token }}", WORKFLOW)
 
     def test_sensitive_repositories_override_central_automerge(self):
         self.assertTrue(INHERITED["platformAutomerge"])

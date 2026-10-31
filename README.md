@@ -55,7 +55,9 @@ Repository permissions:
 
 Verify the Patchraptor App installation includes both new repositories with
 these permissions before the first scheduled run. The central discovery
-allowlist does not grant App access by itself.
+allowlist does not grant App access by itself. The workflow checks the
+installation's accessible repositories before starting Renovate and reports
+the exact target names if access is missing.
 
 Then set these repository secrets on `joshyorko/renovate-config`:
 
@@ -94,6 +96,14 @@ checksums; they stay out of generic version-only updates until a paired
 checksum refresh can be reproduced safely. CAS RCC release qualification and
 method approval belong to [codex-action-server issue #25](https://github.com/joshyorko/codex-action-server/issues/25),
 not to Patchraptor.
+
+The access preflight and Renovate autodiscovery prove different things.
+Renovate's central config requires a repository-local config, so the CAS and
+tunnel-kit repositories will appear in the sweep only after the local configs
+owned by [CAS #25](https://github.com/joshyorko/codex-action-server/issues/25)
+and [tunnel-kit #64](https://github.com/joshyorko/mcp-tunnel-kit/issues/64)
+are present on their default branches. The preflight verifies App visibility;
+it does not claim that a repository without its local config was scanned.
 
 In tunnel-kit, Renovate tracks the `executor` and `tunnel` production image
 tag+digest pairs in `config/deploy-images.json` and the matching Compose image
