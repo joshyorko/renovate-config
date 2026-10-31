@@ -24,7 +24,7 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker",
-      "autoReplaceStringTemplate": "{{{depName}}}:{{#if newValue}}{{{newValue}}}{{else}}{{{currentValue}}}{{/if}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
+      "autoReplaceStringTemplate": "\"executor\": {\n      \"repository\": \"{{{depName}}}:{{#if newValue}}{{{newValue}}}{{else}}{{{currentValue}}}{{/if}}\",\n      \"digest\": \"{{#if newDigest}}{{{newDigest}}}{{else}}{{{currentDigest}}}{{/if}}\""
     },
     {
       "customType": "regex",
@@ -37,7 +37,7 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker",
-      "autoReplaceStringTemplate": "{{{depName}}}:v{{#if newValue}}{{{newValue}}}{{else}}{{{currentValue}}}{{/if}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
+      "autoReplaceStringTemplate": "\"tunnel\": {\n      \"repository\": \"{{{depName}}}:v{{#if newValue}}{{{newValue}}}{{else}}{{{currentValue}}}{{/if}}\",\n      \"digest\": \"{{#if newDigest}}{{{newDigest}}}{{else}}{{{currentDigest}}}{{/if}}\""
     }
   ],
   "packageRules": [
