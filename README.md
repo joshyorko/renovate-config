@@ -29,6 +29,7 @@ default `renovate/` prefix; this config keeps the branch names branded too.
 Create a GitHub App named `Patchraptor`, install it on:
 
 - `joshyorko/camp`
+- `joshyorko/codex-action-server`
 - `joshyorko/devsy-provider-harvester`
 - `joshyorko/renovate-config`
 - `joshyorko/review`
@@ -36,6 +37,7 @@ Create a GitHub App named `Patchraptor`, install it on:
 - `joshyorko/dudley-factory`
 - `joshyorko/dudley-os`
 - `joshyorko/homebrew-tools`
+- `joshyorko/mcp-tunnel-kit`
 - `joshyorko/rcc`
 - `joshyorko/room-of-requirement`
 
@@ -50,6 +52,12 @@ Repository permissions:
 - Commit statuses: read and write
 - Workflows: read and write
 - Metadata: read-only
+
+Verify the Patchraptor App installation includes both new repositories with
+these permissions before the first scheduled run. The central discovery
+allowlist does not grant App access by itself. The workflow checks the
+installation's accessible repositories before starting Renovate and reports
+the exact target names if access is missing.
 
 Then set these repository secrets on `joshyorko/renovate-config`:
 
@@ -77,3 +85,32 @@ Patchraptor GitHub App installation is missing `Dependabot alerts: read-only`
 access. The repository can still receive normal dependency PRs, but Renovate
 cannot read GitHub vulnerability alerts until the App permissions are updated
 and the installation accepts the new permission request.
+
+## Codex control-plane repositories
+
+Patchraptor discovers `codex-action-server` and `mcp-tunnel-kit` from the
+explicit allowlist above. It uses Renovate's standard Python, GitHub Actions,
+and Containerfile managers for CAS dependencies. The pinned `devsy`, `kubectl`,
+and `actions-runtime` downloads combine versions with independent SHA256
+checksums; they stay out of generic version-only updates until a paired
+checksum refresh can be reproduced safely. CAS RCC release qualification and
+method approval belong to [codex-action-server issue #25](https://github.com/joshyorko/codex-action-server/issues/25),
+not to Patchraptor.
+
+The access preflight and Renovate autodiscovery prove different things.
+Renovate's central config requires a repository-local config, so the CAS and
+tunnel-kit repositories will appear in the sweep only after the local configs
+owned by [CAS #25](https://github.com/joshyorko/codex-action-server/issues/25)
+and [tunnel-kit #64](https://github.com/joshyorko/mcp-tunnel-kit/issues/64)
+are present on their default branches. The preflight verifies App visibility;
+it does not claim that a repository without its local config was scanned.
+
+In tunnel-kit, Renovate tracks the `executor` and `tunnel` production image
+tag+digest pairs in `config/deploy-images.json` and the matching Compose image
+references. Those updates require a Dependency Dashboard checkbox and passing
+repository CI before Renovate opens a PR; they are never automerged. The CAS
+and schema-proxy image entries share a CAS digest and source revision and are
+excluded from generic image updates. Only the provenance-verified CAS handoff
+in [mcp-tunnel-kit issue #64](https://github.com/joshyorko/mcp-tunnel-kit/issues/64)
+may change them. Human review and the repository's protected deployment workflow
+remain required; Patchraptor does not deploy or restart native daemons.

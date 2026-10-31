@@ -12,9 +12,11 @@ on:
       - "scripts/sync-review-omp-pins.py"
       - "scripts/review-sdk-lock.py"
       - "scripts/verify-review-qualification.py"
+      - "scripts/verify_patchraptor_repository_visibility.py"
       - "tests/test_review_pin_sync.py"
       - "tests/test_review_qualification.py"
       - "tests/test_review_sdk_lock.py"
+      - "tests/test_patchraptor_config.py"
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
@@ -67,6 +69,14 @@ jobs:
           token: ${{ steps.get-token.outputs.token }}
           persist-credentials: false
 
+      - name: Verify Patchraptor target repository access
+        env:
+          GH_TOKEN: ${{ steps.get-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp /installation/repositories \
+            | python3 scripts/verify_patchraptor_repository_visibility.py
+
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
         env:
@@ -88,6 +98,7 @@ jobs:
       - run: python3 tests/test_review_qualification.py
       - run: python3 tests/test_review_pin_sync.py
       - run: python3 tests/test_review_sdk_lock.py
+      - run: python3 tests/test_patchraptor_config.py
 
   qualify-review-omp:
     name: Qualify Review OMP update without write credentials
