@@ -254,14 +254,12 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
             self.assertIsNone(path_regex.search("config/other-images.json"))
             self.assertEqual(manager["datasourceTemplate"], "docker")
             self.assertEqual(manager["versioningTemplate"], "docker")
-            self.assertEqual(len(manager["matchStrings"]), 1)
-
-            pattern = manager["matchStrings"][0]
-            python_pattern = re.sub(
+            matches = [re.search(re.sub(
                 r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", pattern
-            )
-            match = re.search(python_pattern, DEPLOY_IMAGES)
-            self.assertIsNotNone(match)
+            ), DEPLOY_IMAGES) for pattern in manager["matchStrings"]]
+            matches = [match for match in matches if match is not None]
+            self.assertEqual(len(matches), 1)
+            match = matches[0]
             extracted.append(match.groupdict())
 
             template = manager["autoReplaceStringTemplate"]
@@ -322,11 +320,27 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
             }
         )
         for manager in managers:
-            pattern = manager["matchStrings"][0]
-            python_pattern = re.sub(
+            for pattern in manager["matchStrings"]:
+                python_pattern = re.sub(
+                    r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", pattern
+                )
+                self.assertIsNone(re.search(python_pattern, production_cas_only))
+
+    def test_manifest_regex_survives_the_production_writers_sorted_keys(self):
+        content = json.dumps(json.loads(DEPLOY_IMAGES), sort_keys=True, indent=2)
+        for manager in INHERITED["customManagers"]:
+            matches = [re.search(re.sub(
                 r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", pattern
-            )
-            self.assertIsNone(re.search(python_pattern, production_cas_only))
+            ), content) for pattern in manager["matchStrings"]]
+            matches = [match for match in matches if match is not None]
+            self.assertEqual(len(matches), 1)
+            match = matches[0]
+            replacement = render_replacement(manager["autoReplaceStringTemplate"], {
+                **match.groupdict(), "newValue": "9.8.7", "newDigest": "sha256:" + "0" * 64,
+            })
+            updated = json.loads(content[:match.start()] + replacement + content[match.end():])
+            for role in ("cas", "schema_proxy"):
+                self.assertEqual(updated["images"][role], json.loads(DEPLOY_IMAGES)["images"][role])
 
     def test_package_rules_group_only_non_cas_tunnel_images(self):
         rule = next(
