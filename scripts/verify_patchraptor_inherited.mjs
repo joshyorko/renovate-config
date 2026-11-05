@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 
 function renovateDist() {
@@ -29,6 +30,8 @@ const { validateConfig } = await load('config/validation.js');
 const { getOptions } = await load('config/options/index.js');
 const { Vulnerabilities } = await load('workers/repository/process/vulnerabilities.js');
 const { applyPackageRules } = await load('util/package-rules/index.js');
+const { extractPackageFile } = await load('modules/manager/custom/regex/index.js');
+const { doAutoReplace } = await load('workers/repository/update/branch/auto-replace.js');
 await init();
 GlobalConfig.set({ platform: 'github', hostRules: [] });
 
@@ -47,6 +50,7 @@ setPlatformApi('github');
 const defaults = getOptions().find(option => option.name === 'vulnerabilityAlerts').default;
 const engine = new Vulnerabilities(null);
 const centralPreset = 'github>joshyorko/renovate-config:org-inherited-config';
+let imageManagers;
 
 for (const [repository, name] of [
   ['joshyorko/codex-action-server', 'cas.json'],
@@ -66,6 +70,7 @@ for (const [repository, name] of [
   // Keep every local policy setting; only the now-resolved pointer is removed.
   const resolvedLocal = mergeChildConfig(inherited, { ...local, extends: [] });
   const effective = mergeChildConfig(inherited, resolvedLocal);
+  if (repository === 'joshyorko/mcp-tunnel-kit') imageManagers = JSON.parse(candidate).customManagers;
   const vulnerabilityAlerts = mergeChildConfig(defaults, effective.vulnerabilityAlerts ?? {});
   const affected = { package: { ecosystem: 'PyPI', name: 'mcp' }, ranges: [] };
   const vulnerability = { id: 'GHSA-fixture', summary: 'Fixture', details: 'Synthetic policy fixture', references: [], affected: [affected] };
@@ -84,3 +89,51 @@ for (const [repository, name] of [
   console.log(JSON.stringify({ repository, rawCandidateInheritance: true, localApprovalAndCi: true }));
 }
 assert.equal(reads, 2);
+
+const liveContent = fs.readFileSync(path.join(policiesRoot, 'images.json'), 'utf8');
+const liveImages = JSON.parse(liveContent);
+assert.equal(imageManagers.length, 2);
+for (const manager of imageManagers) {
+  assert.equal(extractPackageFile(liveContent, 'config/deploy-images.json', manager)?.deps.length, 1);
+}
+for (const order of ['repository-first', 'digest-first']) {
+  const fixture = structuredClone(liveImages);
+  for (const role of ['executor', 'tunnel']) {
+    const { repository, digest, ...rest } = fixture.images[role];
+    fixture.images[role] = order === 'repository-first' ? { repository, digest, ...rest } : { digest, repository, ...rest };
+  }
+  const content = JSON.stringify(fixture, null, 2);
+  for (const manager of imageManagers) {
+    const extracted = extractPackageFile(content, 'config/deploy-images.json', manager);
+    assert.equal(extracted?.deps.length, 1, `${order}: each role must extract exactly one image`);
+    const dependency = extracted.deps[0];
+    const role = dependency.depName === 'ghcr.io/usefulsoftwareco/executor-selfhost' ? 'executor' : 'tunnel';
+    assert.equal(dependency.depName, role === 'executor' ? 'ghcr.io/usefulsoftwareco/executor-selfhost' : 'ghcr.io/openai/tunnel-client');
+    for (const update of [
+      { newValue: '9.8.7', newDigest: 'sha256:' + '0'.repeat(64) },
+      { newDigest: 'sha256:' + '1'.repeat(64) },
+      { newValue: '9.8.7' },
+    ]) {
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'patchraptor-image-proof-'));
+      try {
+        GlobalConfig.set({ platform: 'github', hostRules: [], localDir: temp });
+        fs.mkdirSync(path.join(temp, 'config'));
+        fs.writeFileSync(path.join(temp, 'config/deploy-images.json'), content);
+        const updated = await doAutoReplace({
+          ...manager, ...dependency, ...update,
+          manager: 'regex', packageFile: 'config/deploy-images.json', depIndex: 0,
+        }, content, false);
+        const parsed = JSON.parse(updated);
+        const tag = update.newValue ?? dependency.currentValue;
+        assert.equal(parsed.images[role].repository, `${dependency.depName}:${role === 'tunnel' ? 'v' : ''}${tag}`);
+        assert.equal(parsed.images[role].digest, update.newDigest ?? dependency.currentDigest);
+        for (const untouched of ['cas', 'schema_proxy', role === 'executor' ? 'tunnel' : 'executor']) {
+          assert.deepEqual(parsed.images[untouched], fixture.images[untouched]);
+        }
+      } finally {
+        fs.rmSync(temp, { recursive: true, force: true });
+      }
+    }
+  }
+  console.log(JSON.stringify({ imageKeyOrder: order, actualRenovateExtractAndReplacement: true }));
+}

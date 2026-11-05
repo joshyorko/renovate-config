@@ -22,7 +22,8 @@
         "/^config\\/deploy-images\\.json$/"
       ],
       "matchStrings": [
-        "\\\"executor\\\"\\s*:\\s*\\{\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/usefulsoftwareco/executor-selfhost):(?<currentValue>[^\\\"@]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\""
+        "\\\"executor\\\"\\s*:\\s*\\{\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/usefulsoftwareco/executor-selfhost):(?<currentValue>[^\\\"@]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\"",
+        "\\\"executor\\\"\\s*:\\s*\\{\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\"\\s*,\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/usefulsoftwareco/executor-selfhost):(?<currentValue>[^\\\"@]+)\\\""
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker",
@@ -37,7 +38,8 @@
         "/^config\\/deploy-images\\.json$/"
       ],
       "matchStrings": [
-        "\\\"tunnel\\\"\\s*:\\s*\\{\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/openai/tunnel-client):v(?<currentValue>[^\\\"@]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\""
+        "\\\"tunnel\\\"\\s*:\\s*\\{\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/openai/tunnel-client):v(?<currentValue>[^\\\"@]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\"",
+        "\\\"tunnel\\\"\\s*:\\s*\\{\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\"\\s*,\\s*\\\"repository\\\"\\s*:\\s*\\\"(?<depName>ghcr\\.io/openai/tunnel-client):v(?<currentValue>[^\\\"@]+)\\\""
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker",
