@@ -5,11 +5,13 @@
   "autodiscover": true,
   "autodiscoverFilter": [
     "joshyorko/camp",
+    "joshyorko/codex-action-server",
     "joshyorko/devsy-provider-harvester",
     "joshyorko/dsb-common",
     "joshyorko/dudley-factory",
     "joshyorko/dudley-os",
     "joshyorko/homebrew-tools",
+    "joshyorko/mcp-tunnel-kit",
     "joshyorko/rcc",
     "joshyorko/review",
     "joshyorko/room-of-requirement"
