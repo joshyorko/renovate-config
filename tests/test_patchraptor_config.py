@@ -63,6 +63,23 @@ def render_replacement(template, values):
 
 
 class PatchraptorTargetConfigTest(unittest.TestCase):
+    def test_inherited_custom_manager_descriptions_pass_raw_array_contract(self):
+        for manager in INHERITED["customManagers"]:
+            self.assertIsInstance(manager["description"], list)
+            self.assertTrue(manager["description"])
+            self.assertTrue(all(isinstance(item, str) for item in manager["description"]))
+
+    def test_target_readiness_is_separate_from_existing_review_writers(self):
+        readiness = WORKFLOW.split("  target-readiness:", 1)[1].split("  qualify-review-omp:", 1)[0]
+        self.assertIn("verify_patchraptor_inherited.mjs", readiness)
+        self.assertIn("docker-network: none", readiness)
+        self.assertIn("verify_patchraptor_sweep.py", readiness)
+        review = WORKFLOW.split("  qualify-review-omp:", 1)[1]
+        self.assertIn("needs: renovate", review)
+        self.assertNotIn("needs: target-readiness", review)
+        self.assertIn("continue-on-error: true", WORKFLOW.split("  qualification-tests:", 1)[0])
+        self.assertIn("docker-volumes: /tmp:/tmp", WORKFLOW.split("  qualification-tests:", 1)[0])
+
     def test_missing_access_names_the_owner_installation_without_logging_token(self):
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts/verify_patchraptor_repository_visibility.py")],
