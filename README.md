@@ -61,6 +61,14 @@ the exact target names if access is missing.
 Its failure message also identifies the App slug and owner installation settings
 URL from the token action's nonsecret outputs; it never prints the token.
 
+CLI config validation normalizes some values before checking them. PR checks
+also run Renovate's raw inherited-config implementation against the candidate
+file and the unchanged CAS/tunnel policies in a container without network access.
+Normal sweeps retain a sanitized info-level JSON log for one day. A separate
+readiness check rejects target configuration errors, missing targets, or missing
+dependency extraction even when Renovate exits successfully. Existing Review
+qualification and writer jobs keep their original dependencies.
+
 Then set these repository secrets on `joshyorko/renovate-config`:
 
 - `RENOVATE_CLIENT_ID`

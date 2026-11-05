@@ -13,10 +13,13 @@ on:
       - "scripts/review-sdk-lock.py"
       - "scripts/verify-review-qualification.py"
       - "scripts/verify_patchraptor_repository_visibility.py"
+      - "scripts/verify_patchraptor_inherited.mjs"
+      - "scripts/verify_patchraptor_sweep.py"
       - "tests/test_review_pin_sync.py"
       - "tests/test_review_qualification.py"
       - "tests/test_review_sdk_lock.py"
       - "tests/test_patchraptor_config.py"
+      - "tests/test_patchraptor_sweep.py"
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
@@ -80,13 +83,28 @@ jobs:
             | python3 scripts/verify_patchraptor_repository_visibility.py
 
       - name: Self-hosted Renovate
+        id: sweep
         uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
         env:
           RENOVATE_DRY_RUN: ${{ github.event_name == 'pull_request' && 'full' }}
           LOG_LEVEL: ${{ github.event.inputs.log-level || 'info' }}
+          LOG_FILE: /tmp/patchraptor-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
+          LOG_FILE_LEVEL: info
         with:
           token: ${{ steps.get-token.outputs.token }}
           configurationFile: ./renovate-config.json
+          docker-volumes: /tmp:/tmp
+          env-regex: '^(?:RENOVATE_\w+|LOG_LEVEL|LOG_FILE|LOG_FILE_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|NO_COLOR|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$'
+
+      - name: Retain sanitized target outcome log
+        if: always() && steps.sweep.outcome != 'skipped'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: patchraptor-target-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/patchraptor-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
+          if-no-files-found: error
+          retention-days: 1
 
   qualification-tests:
     name: Review qualification contract tests
@@ -101,6 +119,56 @@ jobs:
       - run: python3 tests/test_review_pin_sync.py
       - run: python3 tests/test_review_sdk_lock.py
       - run: python3 tests/test_patchraptor_config.py
+      - run: python3 tests/test_patchraptor_sweep.py
+
+  target-readiness:
+    name: CAS and tunnel-kit readiness
+    needs: renovate
+    if: always() && !cancelled() && needs.renovate.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Read unchanged target policies for candidate inheritance test
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/patchraptor-policies"
+          gh api repos/joshyorko/codex-action-server/contents/.github/renovate.json5 --jq .content \
+            | base64 --decode > "$RUNNER_TEMP/patchraptor-policies/cas.json"
+          gh api repos/joshyorko/mcp-tunnel-kit/contents/.github/renovate.json5 --jq .content \
+            | base64 --decode > "$RUNNER_TEMP/patchraptor-policies/tunnel.json"
+      - name: Test candidate raw inheritance with actual Renovate
+        if: github.event_name == 'pull_request'
+        uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
+        env:
+          RENOVATE_CANDIDATE_ROOT: /tmp/patchraptor-candidate
+          RENOVATE_POLICIES_ROOT: /tmp/patchraptor-policies
+        with:
+          token: ${{ github.token }}
+          renovate-version: 43.288.0
+          configurationFile: ./renovate-config.json
+          docker-cmd-file: ./scripts/verify_patchraptor_inherited.mjs
+          docker-network: none
+          docker-volumes: /tmp:/tmp;${{ github.workspace }}:/tmp/patchraptor-candidate:ro;${{ runner.temp }}/patchraptor-policies:/tmp/patchraptor-policies:ro
+      - name: Read actual target sweep outcomes
+        if: github.event_name != 'pull_request'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: patchraptor-target-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/patchraptor-target-log
+      - name: Reject target configuration or extraction failures
+        if: github.event_name != 'pull_request'
+        run: |
+          python3 scripts/verify_patchraptor_sweep.py \
+            "$RUNNER_TEMP/patchraptor-target-log/patchraptor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.jsonl"
 
   qualify-review-omp:
     name: Qualify Review OMP update without write credentials
