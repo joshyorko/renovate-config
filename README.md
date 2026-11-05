@@ -58,6 +58,8 @@ these permissions before the first scheduled run. The central discovery
 allowlist does not grant App access by itself. The workflow checks the
 installation's accessible repositories before starting Renovate and reports
 the exact target names if access is missing.
+Its failure message also identifies the App slug and owner installation settings
+URL from the token action's nonsecret outputs; it never prints the token.
 
 Then set these repository secrets on `joshyorko/renovate-config`:
 

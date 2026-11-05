@@ -72,6 +72,8 @@ jobs:
       - name: Verify Patchraptor target repository access
         env:
           GH_TOKEN: ${{ steps.get-token.outputs.token }}
+          PATCHRAPTOR_INSTALLATION_ID: ${{ steps.get-token.outputs.installation-id }}
+          PATCHRAPTOR_APP_SLUG: ${{ steps.get-token.outputs.app-slug }}
         run: |
           set -euo pipefail
           gh api --paginate --slurp /installation/repositories \

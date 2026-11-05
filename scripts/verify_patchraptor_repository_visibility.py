@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import sys
+import os
+import re
 from collections.abc import Iterable
 from json import JSONDecodeError, load
 
@@ -59,6 +61,15 @@ def main() -> int:
             "Install Patchraptor on the missing target repositories, then rerun.",
             file=sys.stderr,
         )
+        installation_id = os.environ.get("PATCHRAPTOR_INSTALLATION_ID", "")
+        app_slug = os.environ.get("PATCHRAPTOR_APP_SLUG", "")
+        if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,99}", app_slug):
+            print(f"GitHub App: {app_slug}", file=sys.stderr)
+        if re.fullmatch(r"[1-9][0-9]{0,19}", installation_id):
+            print(
+                f"Manage installation: https://github.com/settings/installations/{installation_id}",
+                file=sys.stderr,
+            )
         return 1
 
     print("Patchraptor App visibility is verified for both target repositories.")

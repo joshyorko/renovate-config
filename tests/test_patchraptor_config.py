@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -62,6 +63,38 @@ def render_replacement(template, values):
 
 
 class PatchraptorTargetConfigTest(unittest.TestCase):
+    def test_missing_access_names_the_owner_installation_without_logging_token(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/verify_patchraptor_repository_visibility.py")],
+            input=json.dumps({"repositories": []}),
+            text=True,
+            capture_output=True,
+            env={**os.environ, "PATCHRAPTOR_INSTALLATION_ID": "123456",
+                 "PATCHRAPTOR_APP_SLUG": "patchraptor-private",
+                 "GH_TOKEN": "private-token-sentinel"},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("https://github.com/settings/installations/123456", result.stderr)
+        self.assertIn("patchraptor-private", result.stderr)
+        self.assertNotIn("private-token-sentinel", result.stdout + result.stderr)
+        self.assertIn("PATCHRAPTOR_INSTALLATION_ID: ${{ steps.get-token.outputs.installation-id }}", WORKFLOW)
+        self.assertIn("PATCHRAPTOR_APP_SLUG: ${{ steps.get-token.outputs.app-slug }}", WORKFLOW)
+
+    def test_invalid_installation_hint_cannot_inject_log_content(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/verify_patchraptor_repository_visibility.py")],
+            input=json.dumps({"repositories": []}),
+            text=True,
+            capture_output=True,
+            env={**os.environ, "PATCHRAPTOR_INSTALLATION_ID": "123\nforged-id",
+                 "PATCHRAPTOR_APP_SLUG": "bad\nforged-slug"},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("settings/installations/", result.stderr)
+        self.assertNotIn("forged-", result.stdout + result.stderr)
+
     def test_discovery_is_explicit_and_keeps_existing_repositories(self):
         self.assertTrue(RENOVATE["autodiscover"])
         self.assertEqual(
