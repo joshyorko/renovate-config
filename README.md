@@ -20,6 +20,27 @@ When the trusted Review PR base contains both `ci/sdk-types/package.json` and
 that base with its pinned Node/npm toolchain. Older bases without either file
 retain the Containerfile-only qualification contract; a partial base pair fails.
 
+The sweep and candidate policy tests both select Renovate `43.288.0`.
+`allowedCommands` is scoped through runner `repositories[]` entries: Camp may
+run only its dependency-lock synchronizer; Review may run only its five pinned
+asset/hash synchronizers. Every other discovered repository, including RCC,
+keeps an empty command allowlist. These entries trust code maintained in the
+named repository; an exact command match does not sandbox that script.
+
+The candidate inheritance check also exercises Renovate's actual autodiscovery
+and repository-global configuration path for all eleven targets, checking
+cross-repository denial and command suffix/injection rejection without
+executing repository scripts. Run it locally with the pinned package:
+
+```sh
+RENOVATE_PACKAGE_ROOT=/path/to/renovate/dist node scripts/verify_patchraptor_commands.mjs
+```
+
+Sweep health, per-target extraction/readiness, and Review's exact-source OMP
+patch qualification are separate results. A successful sweep/readiness does
+not qualify Review; an OMP patch/build/canary failure does not establish an RCC
+scanner outage. Keep the qualification failure and its logs visible.
+
 Patchraptor uses `patchraptor/` for Renovate branch names. Project Bluefin's bot
 identity is branded, but its live dependency PR branches still use Renovate's
 default `renovate/` prefix; this config keeps the branch names branded too.

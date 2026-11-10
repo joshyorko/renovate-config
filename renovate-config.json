@@ -16,17 +16,27 @@
     "joshyorko/review",
     "joshyorko/room-of-requirement"
   ],
-  "allowedCommands": [
-    "^node developer/update_dependency_locks\\.mjs$",
-    "^node scripts/update-omp-pins\\.mjs$",
-    "^node scripts/update-gh-pins\\.mjs$",
-    "^node scripts/update-rtk-pins\\.mjs$",
-    "^node scripts/update-requirements-ci-hashes\\.mjs$",
-    "^node scripts/update-typesafe-pins\\.mjs$"
-  ],
   "requireConfig": "required",
   "inheritConfig": true,
   "inheritConfigRepoName": "joshyorko/renovate-config",
   "inheritConfigFileName": "org-inherited-config.json",
-  "inheritConfigStrict": true
+  "inheritConfigStrict": true,
+  "repositories": [
+    {
+      "repository": "joshyorko/camp",
+      "allowedCommands": [
+        "^node developer/update_dependency_locks\\.mjs$"
+      ]
+    },
+    {
+      "repository": "joshyorko/review",
+      "allowedCommands": [
+        "^node scripts/update-omp-pins\\.mjs$",
+        "^node scripts/update-gh-pins\\.mjs$",
+        "^node scripts/update-rtk-pins\\.mjs$",
+        "^node scripts/update-requirements-ci-hashes\\.mjs$",
+        "^node scripts/update-typesafe-pins\\.mjs$"
+      ]
+    }
+  ]
 }

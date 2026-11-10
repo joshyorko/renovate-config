@@ -18,6 +18,8 @@ function renovateDist() {
   return found;
 }
 
+await import('./verify_patchraptor_commands.mjs');
+
 const dist = renovateDist();
 const load = relative => import(pathToFileURL(path.join(dist, relative)).href);
 const { init } = await load('logger/index.js');

@@ -133,17 +133,13 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
         self.assertNotIn("*", RENOVATE["autodiscoverFilter"])
         self.assertEqual(RENOVATE["requireConfig"], "required")
         self.assertTrue(REQUIRED_TARGETS.issubset(RENOVATE["autodiscoverFilter"]))
+        self.assertNotIn("allowedCommands", RENOVATE)
         self.assertEqual(
-            RENOVATE["allowedCommands"],
-            [
-                "^node developer/update_dependency_locks\\.mjs$",
-                "^node scripts/update-omp-pins\\.mjs$",
-                "^node scripts/update-gh-pins\\.mjs$",
-                "^node scripts/update-rtk-pins\\.mjs$",
-                "^node scripts/update-requirements-ci-hashes\\.mjs$",
-                "^node scripts/update-typesafe-pins\\.mjs$",
-            ],
+            {entry["repository"] for entry in RENOVATE["repositories"]},
+            {"joshyorko/camp", "joshyorko/review"},
         )
+        self.assertIn("verify_patchraptor_commands.mjs", WORKFLOW)
+        self.assertEqual(WORKFLOW.count("renovate-version: 43.288.0"), 2)
 
     def test_installation_visibility_preflight_is_bounded_and_wired(self):
         self.assertEqual(

@@ -14,6 +14,7 @@ on:
       - "scripts/verify-review-qualification.py"
       - "scripts/verify_patchraptor_repository_visibility.py"
       - "scripts/verify_patchraptor_inherited.mjs"
+      - "scripts/verify_patchraptor_commands.mjs"
       - "scripts/verify_patchraptor_sweep.py"
       - "tests/test_review_pin_sync.py"
       - "tests/test_review_qualification.py"
@@ -92,6 +93,7 @@ jobs:
           LOG_FILE_LEVEL: info
         with:
           token: ${{ steps.get-token.outputs.token }}
+          renovate-version: 43.288.0
           configurationFile: ./renovate-config.json
           docker-volumes: /tmp:/tmp
           env-regex: '^(?:RENOVATE_\w+|LOG_LEVEL|LOG_FILE|LOG_FILE_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|NO_COLOR|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$'
