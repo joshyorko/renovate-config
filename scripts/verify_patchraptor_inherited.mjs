@@ -18,7 +18,11 @@ function renovateDist() {
   return found;
 }
 
-await import('./verify_patchraptor_commands.mjs');
+// The action mounts this entrypoint at /; sibling imports must use the repo mount.
+await import(pathToFileURL(path.join(
+  process.env.RENOVATE_CANDIDATE_ROOT ?? process.cwd(),
+  'scripts/verify_patchraptor_commands.mjs',
+)).href);
 
 const dist = renovateDist();
 const load = relative => import(pathToFileURL(path.join(dist, relative)).href);

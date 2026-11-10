@@ -30,7 +30,10 @@ named repository; an exact command match does not sandbox that script.
 The candidate inheritance check also exercises Renovate's actual autodiscovery
 and repository-global configuration path for all eleven targets, checking
 cross-repository denial and command suffix/injection rejection without
-executing repository scripts. Run it locally with the pinned package:
+executing repository scripts. CI runs the complete inheritance check through a
+relocated entrypoint, matching the action's single-file mount; helper imports
+resolve through the read-only candidate repository mount. Run the command policy
+check locally with the pinned package:
 
 ```sh
 RENOVATE_PACKAGE_ROOT=/path/to/renovate/dist node scripts/verify_patchraptor_commands.mjs

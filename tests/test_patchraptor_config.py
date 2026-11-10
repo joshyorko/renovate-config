@@ -71,7 +71,7 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
 
     def test_target_readiness_is_separate_from_existing_review_writers(self):
         readiness = WORKFLOW.split("  target-readiness:", 1)[1].split("  qualify-review-omp:", 1)[0]
-        self.assertIn("verify_patchraptor_inherited.mjs", readiness)
+        self.assertIn("docker-cmd-file: ./scripts/test_patchraptor_relocated_entrypoint.mjs", readiness)
         self.assertIn("docker-network: none", readiness)
         self.assertIn("verify_patchraptor_sweep.py", readiness)
         review = WORKFLOW.split("  qualify-review-omp:", 1)[1]

@@ -15,6 +15,7 @@ on:
       - "scripts/verify_patchraptor_repository_visibility.py"
       - "scripts/verify_patchraptor_inherited.mjs"
       - "scripts/verify_patchraptor_commands.mjs"
+      - "scripts/test_patchraptor_relocated_entrypoint.mjs"
       - "scripts/verify_patchraptor_sweep.py"
       - "tests/test_review_pin_sync.py"
       - "tests/test_review_qualification.py"
@@ -159,7 +160,7 @@ jobs:
           token: ${{ github.token }}
           renovate-version: 43.288.0
           configurationFile: ./renovate-config.json
-          docker-cmd-file: ./scripts/verify_patchraptor_inherited.mjs
+          docker-cmd-file: ./scripts/test_patchraptor_relocated_entrypoint.mjs
           docker-network: none
           docker-volumes: /tmp:/tmp;${{ github.workspace }}:/tmp/patchraptor-candidate:ro;${{ runner.temp }}/patchraptor-policies:/tmp/patchraptor-policies:ro
       - name: Read actual target sweep outcomes
