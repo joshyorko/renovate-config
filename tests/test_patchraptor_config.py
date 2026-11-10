@@ -69,9 +69,16 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
             self.assertTrue(manager["description"])
             self.assertTrue(all(isinstance(item, str) for item in manager["description"]))
 
+    def test_custom_container_entrypoints_are_executable(self):
+        # The pinned image treats a non-executable argument as a repository name.
+        entrypoints = re.findall(r"docker-cmd-file:\s+(\S+)", WORKFLOW)
+        self.assertTrue(entrypoints)
+        for entrypoint in entrypoints:
+            self.assertTrue(os.access(ROOT / entrypoint, os.X_OK), entrypoint)
+
     def test_target_readiness_is_separate_from_existing_review_writers(self):
         readiness = WORKFLOW.split("  target-readiness:", 1)[1].split("  qualify-review-omp:", 1)[0]
-        self.assertIn("verify_patchraptor_inherited.mjs", readiness)
+        self.assertIn("docker-cmd-file: ./scripts/test_patchraptor_relocated_entrypoint.mjs", readiness)
         self.assertIn("docker-network: none", readiness)
         self.assertIn("verify_patchraptor_sweep.py", readiness)
         review = WORKFLOW.split("  qualify-review-omp:", 1)[1]
@@ -133,17 +140,13 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
         self.assertNotIn("*", RENOVATE["autodiscoverFilter"])
         self.assertEqual(RENOVATE["requireConfig"], "required")
         self.assertTrue(REQUIRED_TARGETS.issubset(RENOVATE["autodiscoverFilter"]))
+        self.assertNotIn("allowedCommands", RENOVATE)
         self.assertEqual(
-            RENOVATE["allowedCommands"],
-            [
-                "^node developer/update_dependency_locks\\.mjs$",
-                "^node scripts/update-omp-pins\\.mjs$",
-                "^node scripts/update-gh-pins\\.mjs$",
-                "^node scripts/update-rtk-pins\\.mjs$",
-                "^node scripts/update-requirements-ci-hashes\\.mjs$",
-                "^node scripts/update-typesafe-pins\\.mjs$",
-            ],
+            {entry["repository"] for entry in RENOVATE["repositories"]},
+            {"joshyorko/camp", "joshyorko/review"},
         )
+        self.assertIn("verify_patchraptor_commands.mjs", WORKFLOW)
+        self.assertEqual(WORKFLOW.count("renovate-version: 43.288.0"), 2)
 
     def test_installation_visibility_preflight_is_bounded_and_wired(self):
         self.assertEqual(
