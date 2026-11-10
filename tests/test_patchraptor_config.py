@@ -69,6 +69,13 @@ class PatchraptorTargetConfigTest(unittest.TestCase):
             self.assertTrue(manager["description"])
             self.assertTrue(all(isinstance(item, str) for item in manager["description"]))
 
+    def test_custom_container_entrypoints_are_executable(self):
+        # The pinned image treats a non-executable argument as a repository name.
+        entrypoints = re.findall(r"docker-cmd-file:\s+(\S+)", WORKFLOW)
+        self.assertTrue(entrypoints)
+        for entrypoint in entrypoints:
+            self.assertTrue(os.access(ROOT / entrypoint, os.X_OK), entrypoint)
+
     def test_target_readiness_is_separate_from_existing_review_writers(self):
         readiness = WORKFLOW.split("  target-readiness:", 1)[1].split("  qualify-review-omp:", 1)[0]
         self.assertIn("docker-cmd-file: ./scripts/test_patchraptor_relocated_entrypoint.mjs", readiness)
