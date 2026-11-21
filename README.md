@@ -12,6 +12,10 @@ Patchraptor runs every 30 minutes. Dependency Dashboard checkbox edits in target
 repositories are processed on the next central run or after a manual workflow
 dispatch in this repo.
 
+T3 Code packaging is retired from `joshyorko/homebrew-tools`. The inherited policy
+disables `pingdotgg/t3code` updates only in that tap; its other packages continue
+to receive updates. Install T3 Code from its upstream distribution instead.
+
 The Renovate workflow also supports a `qualification-only` manual dispatch
 input. Enable it to qualify the existing Review OMP update from a selected
 central branch without running Renovate or writing qualification receipts.
