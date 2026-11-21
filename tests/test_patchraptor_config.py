@@ -63,6 +63,14 @@ def render_replacement(template, values):
 
 
 class PatchraptorTargetConfigTest(unittest.TestCase):
+    def test_retired_t3_updates_are_disabled_only_in_the_homebrew_tap(self):
+        rules = [rule for rule in INHERITED["packageRules"]
+                 if "pingdotgg/t3code" in rule.get("matchPackageNames", [])]
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0]["matchRepositories"], ["joshyorko/homebrew-tools"])
+        self.assertEqual(rules[0]["matchPackageNames"], ["pingdotgg/t3code"])
+        self.assertIs(rules[0]["enabled"], False)
+
     def test_inherited_custom_manager_descriptions_pass_raw_array_contract(self):
         for manager in INHERITED["customManagers"]:
             self.assertIsInstance(manager["description"], list)

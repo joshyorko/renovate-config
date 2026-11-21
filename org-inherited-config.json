@@ -48,6 +48,18 @@
   ],
   "packageRules": [
     {
+      "description": [
+        "T3 Code packaging is retired from the Homebrew tap; use upstream distribution and updates."
+      ],
+      "matchRepositories": [
+        "joshyorko/homebrew-tools"
+      ],
+      "matchPackageNames": [
+        "pingdotgg/t3code"
+      ],
+      "enabled": false
+    },
+    {
       "automerge": true,
       "matchUpdateTypes": [
         "pin",
