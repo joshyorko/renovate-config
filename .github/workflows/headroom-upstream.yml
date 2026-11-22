@@ -1,0 +1,40 @@
+name: Headroom upstream review
+on:
+  schedule:
+    - cron: '27 10 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: headroom-upstream-review
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    if: github.repository == 'joshyorko/renovate-config' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        id: app
+        with:
+          client-id: ${{ secrets.RENOVATE_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
+          owner: joshyorko
+          repositories: headroom
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Propose upstream changes
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh auth setup-git
+          git init --quiet "$RUNNER_TEMP/headroom"
+          cd "$RUNNER_TEMP/headroom"
+          bash "$GITHUB_WORKSPACE/scripts/headroom-upstream-pr.sh"
